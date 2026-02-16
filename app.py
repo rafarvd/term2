@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import random
 
 # uv pip install -U camoufox
 from browserforge.fingerprints import Screen
@@ -10,13 +11,16 @@ from playwright.async_api import Page
 from hcaptcha_challenger import AgentV, AgentConfig, CaptchaResponse
 from hcaptcha_challenger.utils import SiteKey
 
+MAX_RETRIES = 5  # None = infinito
 url = os.getenv("URL")
 comando = os.getenv("COMANDO")
 
 async def challenge(page: Page) -> AgentV:
     """Automates the process of solving an hCaptcha challenge."""
     # [IMPORTANT] Initialize the Agent before triggering hCaptcha
-    agent_config = AgentConfig(DISABLE_BEZIER_TRAJECTORY=True)
+    api_key = os.getenv("API_KEY").split('\n')
+    agent_config = AgentConfig(
+        DISABLE_BEZIER_TRAJECTORY=True, GEMINI_API_KEY=random.choice(api_key))
     agent = AgentV(page=page, agent_config=agent_config)
 
     # In your real-world workflow, you may need to replace the `click_checkbox()`
@@ -29,7 +33,7 @@ async def challenge(page: Page) -> AgentV:
     return agent
 
 
-async def main():
+async def run_browser():
     async with AsyncCamoufox(
         headless=True,
         persistent_context=True,
@@ -73,6 +77,24 @@ async def main():
         # await asyncio.sleep(minutos * 60)
         await page.wait_for_timeout(minutos * 60 * 1000)
         await page.screenshot(path="screen.png", full_page=True)
+
+
+async def main():
+    attempts = 0
+    while True:
+        try:
+            print("🚀 Iniciando navegador...")
+            await run_browser()
+            print("✅ Finalizado com sucesso")
+            break
+        except Exception as e:
+            attempts += 1
+            print(f"❌ Erro (tentativa {attempts}): {e}")
+            if MAX_RETRIES and attempts >= MAX_RETRIES:
+                print("🛑 Limite de tentativas atingido")
+                break
+            print("♻️ Reiniciando em 5 segundos...")
+            await asyncio.sleep(5)
 
 if __name__ == "__main__":
     asyncio.run(main())
